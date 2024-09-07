@@ -22,7 +22,7 @@ const openai = createAzure({
       async start(controller) {
         const reader = originalResponse.body!.getReader()
 
-        console.log('Steam Started \n')
+        // console.log('Steam Started \n')
 
         while (true) {
           const { done, value } = await reader.read()
@@ -33,7 +33,7 @@ const openai = createAzure({
             const encoder = new TextEncoder()
             const text = decoder.decode(value)
 
-            console.log('Text\n', text)
+            // console.log('Text\n', text)
 
             controller.enqueue(encoder.encode(text))
           } catch (error) {
