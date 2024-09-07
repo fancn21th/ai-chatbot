@@ -8,7 +8,54 @@ import {
   streamUI,
   createStreamableValue
 } from 'ai/rsc'
-import { openai } from '@ai-sdk/openai'
+import { createAzure } from '@ai-sdk/azure'
+
+const openai = createAzure({
+  resourceName: process.env.AZURE_OPENAI_RESOURCE_NAME, // Azure resource name
+  apiKey: process.env.AZURE_OPENAI_API_KEY,
+  fetch: async (url, options) => {
+    // const query = JSON.parse(options!.body! as string).messages[0].content
+
+    const originalResponse = await fetch(url, options)
+
+    const transformedStream = new ReadableStream({
+      async start(controller) {
+        const reader = originalResponse.body!.getReader()
+
+        console.log('Steam Started \n')
+
+        while (true) {
+          const { done, value } = await reader.read()
+          if (done) break
+
+          try {
+            const decoder = new TextDecoder()
+            const encoder = new TextEncoder()
+            const text = decoder.decode(value)
+
+            console.log('Text\n', text)
+
+            controller.enqueue(encoder.encode(text))
+          } catch (error) {
+            console.error('Error', error)
+            controller.error(error)
+            break
+          }
+        }
+
+        controller.close()
+      }
+    })
+
+    // console.log("Response", response.status, response.body);
+
+    return new Response(transformedStream, {
+      headers: originalResponse.headers,
+      status: originalResponse.status,
+      statusText: originalResponse.statusText
+    })
+  }
+})
 
 import {
   spinner,
@@ -132,17 +179,17 @@ async function submitUserMessage(content: string) {
     system: `\
     You are a stock trading conversation bot and you can help users buy stocks, step by step.
     You and the user can discuss stock prices and the user can adjust the amount of stocks they want to buy, or place an order, in the UI.
-    
+
     Messages inside [] means that it's a UI element or a user event. For example:
     - "[Price of AAPL = 100]" means that an interface of the stock price of AAPL is shown to the user.
     - "[User has changed the amount of AAPL to 10]" means that the user has changed the amount of AAPL to 10 in the UI.
-    
+
     If the user requests purchasing a stock, call \`show_stock_purchase_ui\` to show the purchase UI.
     If the user just wants the price, call \`show_stock_price\` to show the price.
     If you want to show trending stocks, call \`list_stocks\`.
     If you want to show events, call \`get_events\`.
     If the user wants to sell stock, or complete another impossible task, respond that you are a demo and cannot do that.
-    
+
     Besides that, you can also chat with users and do some calculations if needed.`,
     messages: [
       ...aiState.get().messages.map((message: any) => ({
